@@ -63,6 +63,15 @@ export async function requireUser(request: Request) {
   throw await logout(request);
 }
 
+export async function requireNoUser(request: Request) {
+  const session = await getSession(request);
+  const userId = session.get(USER_SESSION_KEY);
+
+  if (userId === undefined) return;
+
+  throw redirect(`/`);
+}
+
 export async function requireUserWithType(request: Request, role: UserType) {
   const user = await requireUser(request);
 

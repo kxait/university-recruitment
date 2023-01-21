@@ -1,9 +1,18 @@
 import type { User } from "@prisma/client";
 
 import { dbClient } from "~/db.server";
-import { UserType } from "enum/enum";
+import { RecruitmentStatus, UserType } from "enum/enum";
 
 export type { User } from "@prisma/client";
+
+export interface ExamResultForRegistration {
+  subjectName: string;
+  result: number;
+}
+
+export interface CourseRegistrationForRegistration {
+  course: string;
+}
 
 export async function getUserById(id: User["id"]) {
   return dbClient.user.findUnique({ where: { id } });
@@ -25,6 +34,65 @@ export async function createUser(
       email,
       password: password,
       userType: role,
+    },
+  });
+}
+
+export async function createExamRegistration(
+  email: string,
+  password: string,
+  address: string,
+  finishedSchool: string,
+  pesel: string,
+  examResults: ExamResultForRegistration[],
+  courseRegistrations: CourseRegistrationForRegistration[]
+) {
+  const user = await dbClient.user.create({
+    data: {
+      email,
+      password,
+      userType: UserType.USER,
+    },
+  });
+  await dbClient.userRecruitment.create({
+    data: {
+      userId: user.id,
+      address,
+      finishedSchool,
+      name: email,
+      paid: false,
+      pesel,
+    },
+  });
+  await Promise.all(
+    courseRegistrations.map(async (element) => {
+      await dbClient.userCourseRegistration.create({
+        data: {
+          course: element.course,
+          recruitmentStatus: RecruitmentStatus.NEW as string,
+          userId: user.id,
+        },
+      });
+    })
+  );
+  await Promise.all(
+    examResults.map(async (element) => {
+      await dbClient.userExamResult.create({
+        data: {
+          subjectName: element.subjectName,
+          result: element.result,
+          userId: user.id,
+        },
+      });
+    })
+  );
+
+  return await dbClient.user.findUnique({
+    where: { id: user.id },
+    include: {
+      userCourseRegistrations: true,
+      userExamResults: true,
+      userRecruitment: true,
     },
   });
 }
