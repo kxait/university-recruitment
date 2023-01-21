@@ -1,0 +1,74 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+//enum RecruitmentStatus {
+//  NEW
+//  CONFIRMED
+//  ACCEPTED
+//  REJECTED
+//  ERROR
+//}
+
+// enum UserType {
+//  STUDENT
+//  ADMIN
+//}
+
+model User {
+  id       Int    @id @default(autoincrement())
+  email    String @unique
+  password String
+
+  userRecruitment UserRecruitment?
+  userExamResults UserExamResult[]
+  userCourseRegistrations UserCourseRegistration[]
+  administrator   Administrator?
+
+  userType String //UserType
+}
+
+model Administrator {
+  userId Int  @id
+  user   User @relation(references: [id], fields: [userId], onDelete: Cascade, onUpdate: Cascade)
+
+  name String
+}
+
+model UserRecruitment {
+  userId Int    @id
+  user   User   @relation(references: [id], fields: [userId], onDelete: Cascade, onUpdate: Cascade)
+  name   String
+
+
+  address String
+
+  finishedSchool String
+  pesel          String
+
+  paid Boolean
+}
+
+model UserCourseRegistration {
+  id Int @id @default(autoincrement())
+  userId Int
+  user User @relation(references: [id], fields: [userId], onDelete: Cascade, onUpdate: Cascade)
+
+  course String
+
+  recruitmentStatus String //RecruitmentStatus
+}
+
+model UserExamResult {
+  id Int @id @default(autoincrement())
+  userId Int
+  user   User @relation(references: [id], fields: [userId], onDelete: Cascade, onUpdate: Cascade)
+
+  subjectName String
+  result      Float
+}
