@@ -47,6 +47,14 @@ export async function createExamRegistration(
   examResults: ExamResultForRegistration[],
   courseRegistrations: CourseRegistrationForRegistration[]
 ) {
+  const emailExists = await dbClient.user.findUnique({
+    where: { email },
+  });
+
+  if (emailExists != null) {
+    return { error: "użytkownik o takim e-mail już istnieje!", data: null };
+  }
+
   const user = await dbClient.user.create({
     data: {
       email,
@@ -87,14 +95,17 @@ export async function createExamRegistration(
     })
   );
 
-  return await dbClient.user.findUnique({
-    where: { id: user.id },
-    include: {
-      userCourseRegistrations: true,
-      userExamResults: true,
-      userRecruitment: true,
-    },
-  });
+  return {
+    error: null,
+    data: await dbClient.user.findUnique({
+      where: { id: user.id },
+      include: {
+        userCourseRegistrations: true,
+        userExamResults: true,
+        userRecruitment: true,
+      },
+    }),
+  };
 }
 
 export async function deleteUserByEmail(email: User["email"]) {

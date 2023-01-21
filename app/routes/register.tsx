@@ -1,14 +1,15 @@
 import { Form, useActionData, useTransition } from "@remix-run/react";
 import type { ActionArgs, LoaderArgs } from "@remix-run/server-runtime";
 import { json } from "@remix-run/server-runtime";
+import { Course } from "enum/enum";
 import React from "react";
-import { finished } from "stream";
 import type {
   CourseRegistrationForRegistration,
   ExamResultForRegistration,
 } from "~/models/user.server";
 import { createExamRegistration } from "~/models/user.server";
 import { createUserSession, requireNoUser } from "~/session.server";
+import { getLocalizedCourseName } from "~/utils";
 
 function validate<T>(
   formData: FormData,
@@ -49,25 +50,65 @@ function validate<T>(
 export async function action({ request }: ActionArgs) {
   const formData = await request.formData();
 
-  const email = validate<string>(formData, "email", () => true, "");
-  if (email.error) return { fieldError: email.fieldError };
+  const errors: { [key: string]: string } = {};
 
-  const password = validate<string>(formData, "password", () => true, "");
-  if (password.error) return { fieldError: password.fieldError };
+  const name = validate<string>(
+    formData,
+    "name",
+    (data) => data.length !== 0,
+    "złe imie i nazwisko"
+  );
 
-  const address = validate<string>(formData, "address", () => true, "");
-  if (address.error) return { fieldError: address.fieldError };
+  const email = validate<string>(
+    formData,
+    "email",
+    (data) => data.length !== 0,
+    "zły email"
+  );
+  //if (email.error) return { fieldError: email.fieldError };
+
+  const password = validate<string>(
+    formData,
+    "password",
+    (data) => data.length !== 0,
+    "złe hasło"
+  );
+  //if (password.error) return { fieldError: password.fieldError };
+
+  const address = validate<string>(
+    formData,
+    "address",
+    (data) => data.length !== 0,
+    "zły adres"
+  );
+  //if (address.error) return { fieldError: address.fieldError };
 
   const finishedSchool = validate<string>(
     formData,
     "finishedSchool",
-    () => true,
-    ""
+    (data) => data.length !== 0,
+    "zła wartość"
   );
-  if (finishedSchool.error) return { fieldError: finishedSchool.fieldError };
+  //if (finishedSchool.error) return { fieldError: finishedSchool.fieldError };
 
-  const pesel = validate<string>(formData, "pesel", () => true, "");
-  if (pesel.error) return { fieldError: pesel.fieldError };
+  const pesel = validate<string>(
+    formData,
+    "pesel",
+    (pesel) => pesel.length !== 0,
+    "zły pesel"
+  );
+  //if (pesel.error) return { fieldError: pesel.fieldError };
+
+  let fieldErrors: { [key: string]: string } = [
+    name,
+    email,
+    password,
+    address,
+    finishedSchool,
+    pesel,
+  ]
+    .flatMap((x) => x)
+    .reduce((cur, me) => (cur = { ...cur, ...me.fieldError }), {});
 
   const examResults = JSON.parse(
     formData.get("examResults") as string
@@ -76,10 +117,17 @@ export async function action({ request }: ActionArgs) {
     formData.get("courseRegistrations") as string
   ) as CourseRegistrationForRegistration[];
 
-  if (examResults == null) return { fieldError: { examResults: "bad data" } };
+  if (examResults == null || examResults.length === 0)
+    fieldErrors = { ...fieldErrors, examResults: "złe dane o egzaminach" };
 
-  if (courseRegistrations == null)
-    return { fieldError: { courseRegistrations: "bad data" } };
+  if (courseRegistrations == null || courseRegistrations.length === 0)
+    fieldErrors = {
+      ...fieldErrors,
+      courseRegistrations: "złe dane o kierunkach",
+    };
+
+  if (Object.keys(fieldErrors).length !== 0)
+    return { fieldError: fieldErrors, value: null };
 
   const createdUser = await createExamRegistration(
     email.value,
@@ -91,9 +139,13 @@ export async function action({ request }: ActionArgs) {
     courseRegistrations
   );
 
+  if (createdUser?.error) {
+    return { fieldError: { general: createdUser?.error }, value: null };
+  }
+
   throw await createUserSession({
     request,
-    userId: createdUser?.id as number,
+    userId: createdUser?.data?.id as number,
     remember: true,
     redirectTo: "/my-recruitment",
   });
@@ -156,11 +208,11 @@ export default function Register() {
 
   let [examResults, setExamResults] = React.useState<
     ExamResultForRegistration[]
-  >([{ result: 69.9, subjectName: "matematyka" }]);
+  >([]);
 
-  const [courseRegistrations, setCourseRegistrations] = React.useState<{
-    [key: string]: CourseRegistrationForRegistration;
-  }>({});
+  const [courseRegistrations, setCourseRegistrations] = React.useState<
+    CourseRegistrationForRegistration[]
+  >([]);
 
   const possibleExams = React.useMemo(
     () => [
@@ -173,76 +225,14 @@ export default function Register() {
     []
   );
 
-  const sus = React.useMemo(() => {
-    return (
-      <div>
-        {examResults.map((examResult, index) => {
-          return (
-            <div key={index} className="flex items-center">
-              <div
-                className="btn-error btn-xs btn-circle btn mr-2 ml-1"
-                onClick={() => {
-                  setExamResults(examResults.splice(index, 1));
-                }}
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  strokeWidth={1.5}
-                  stroke="currentColor"
-                  className="h-5 w-5"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-              </div>
-              <select
-                className="select-bordered select w-full max-w-xs"
-                onChange={(e) => {
-                  const newValue = e.target.value;
-                  examResults[index] = {
-                    ...examResults[index],
-                    subjectName: newValue,
-                  };
-                  setExamResults(examResults);
-                }}
-                value={examResult.subjectName}
-              >
-                <option disabled>Wybierz kierunek</option>
-                {possibleExams.map((exam) => (
-                  <option key={exam}>{exam}</option>
-                ))}
-              </select>
-              <input
-                onChange={(e) => {
-                  const newValue = e.target.value;
-                  console.log(newValue);
-                  examResults[index] = {
-                    ...examResults[index],
-                    result: Number(newValue),
-                  };
-                  setExamResults(examResults);
-                  return true;
-                }}
-                value={examResults[index].result.toString()}
-                type="number"
-                className="input-bordered input ml-2 w-20"
-              ></input>
-              %
-            </div>
-          );
-        })}
-      </div>
-    );
-  }, [examResults, possibleExams]);
+  const courses = Object.keys(Course);
 
   return (
     <div>
       <div className="text-4xl">Zarejestruj się na studia</div>
+      <div className="text-2xl text-error">
+        {actionData?.fieldError["general"]}
+      </div>
       <Form method="post">
         <FormField
           name="name"
@@ -282,8 +272,19 @@ export default function Register() {
           submitting={submitting}
         />
         <div className="divider" />
+        <div className="text-error">
+          {actionData?.fieldError["examResults"]}
+        </div>
         <div className="flex items-center">
-          <div className="btn-success btn-sm btn-circle btn mr-2">
+          <div
+            className="btn-success btn-sm btn-circle btn mr-2"
+            onClick={() => {
+              setExamResults([
+                ...examResults,
+                { result: 0, subjectName: "Wybierz przedmiot" },
+              ]);
+            }}
+          >
             <svg
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
@@ -301,10 +302,162 @@ export default function Register() {
           </div>
           <div className="my-2 text-2xl">Wyniki z matury</div>
         </div>
-        <div>{sus}</div>
+        <div>
+          {examResults.map((examResult, index) => {
+            return (
+              <div key={index} className="flex items-center">
+                <div
+                  className="btn-error btn-xs btn-circle btn mr-2 ml-1"
+                  onClick={() => {
+                    setExamResults([
+                      ...examResults.filter((x) => x !== examResult),
+                    ]);
+                  }}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={1.5}
+                    stroke="currentColor"
+                    className="h-5 w-5"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                </div>
+                <select
+                  className="select-bordered select w-full max-w-xs"
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    examResults[index] = {
+                      ...examResults[index],
+                      subjectName: newValue,
+                    };
+                    setExamResults([...examResults]);
+                  }}
+                  value={examResult.subjectName}
+                >
+                  <option disabled>Wybierz przedmiot</option>
+                  {possibleExams.map((exam) => (
+                    <option key={exam}>{exam}</option>
+                  ))}
+                </select>
+                <input
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    examResults[index] = {
+                      ...examResults[index],
+                      result: Number(newValue),
+                    };
+                    setExamResults([...examResults]);
+                  }}
+                  value={examResults[index].result.toString()}
+                  type="number"
+                  className="input-bordered input ml-2 w-20"
+                ></input>
+                %
+              </div>
+            );
+          })}
+        </div>
         <div className="divider" />
-        <div className="my-2 text-2xl">Kierunki</div>
-        <div></div>
+        <div className="text-error">
+          {actionData?.fieldError["courseRegistrations"]}
+        </div>
+        <div className="flex items-center">
+          <div
+            className="btn-success btn-sm btn-circle btn mr-2"
+            onClick={() => {
+              setCourseRegistrations([
+                ...courseRegistrations,
+                { course: "Wybierz kierunek" },
+              ]);
+            }}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth={1.5}
+              stroke="currentColor"
+              className="h-6 w-6"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 9v6m3-3H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+          </div>
+          <div className="my-2 text-2xl">Wybierz kierunki</div>
+        </div>
+        <div>
+          {courseRegistrations.map((course, index) => {
+            return (
+              <div key={index} className="flex items-center">
+                <div
+                  className="btn-error btn-xs btn-circle btn mr-2 ml-1"
+                  onClick={() => {
+                    setCourseRegistrations([
+                      ...courseRegistrations.filter((x) => x !== course),
+                    ]);
+                  }}
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    strokeWidth={1.5}
+                    stroke="currentColor"
+                    className="h-5 w-5"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                </div>
+                <select
+                  className="select-bordered select w-full max-w-xs"
+                  onChange={(e) => {
+                    const newValue = e.target.value;
+                    courseRegistrations[index] = {
+                      ...courseRegistrations[index],
+                      course: newValue,
+                    };
+                    setCourseRegistrations([...courseRegistrations]);
+                  }}
+                  value={course.course}
+                >
+                  <option disabled>Wybierz kierunek</option>
+                  {courses.map((course) => (
+                    <option key={course} value={course}>
+                      {getLocalizedCourseName(course as Course)}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="hidden"
+                  value={JSON.stringify(examResults)}
+                  name="examResults"
+                />
+                <input
+                  type="hidden"
+                  value={JSON.stringify(courseRegistrations)}
+                  name="courseRegistrations"
+                />
+              </div>
+            );
+          })}
+        </div>
+        <button type="submit" className="btn-primary btn-lg btn m-6">
+          wyślij
+        </button>
       </Form>
     </div>
   );
