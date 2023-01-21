@@ -17,3 +17,7 @@
 
 # deployment
 - see `start.sh`
+
+![Usage example](https://i.imgur.com/U8UU5LI.png)
+![More usage examples](https://i.imgur.com/ViGv59d.png)
+![Even more still](https://i.imgur.com/dy8TK4K.png)
